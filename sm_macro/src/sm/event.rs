@@ -11,23 +11,23 @@ pub(crate) struct Events(pub Vec<Event>);
 
 impl ToTokens for Events {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        for event in &self.0 {
-            event.to_tokens(tokens);
+        // for event in &self.0 {
+        //     event.to_tokens(tokens);
 
-            let name = &event.name;
-            for other in &self.0 {
-                let other = &other.name;
-                let eq = name == other;
+        //     let name = &event.name;
+        //     for other in &self.0 {
+        //         let other = &other.name;
+        //         let eq = name == other;
 
-                tokens.extend(quote! {
-                    impl PartialEq<#other> for #name {
-                        fn eq(&self, _: & #other) -> bool {
-                            #eq
-                        }
-                    }
-                });
-            }
-        }
+        //         tokens.extend(quote! {
+        //             impl PartialEq<#other> for #name {
+        //                 fn eq(&self, _: & #other) -> bool {
+        //                     #eq
+        //                 }
+        //             }
+        //         });
+        //     }
+        // }
     }
 }
 
@@ -51,13 +51,13 @@ impl Parse for Event {
 
 impl ToTokens for Event {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let name = &self.name;
+        // let name = &self.name;
 
-        tokens.extend(quote! {
-            #[derive(Clone, Copy, Debug, Eq)]
-            pub struct #name;
-            impl Event for #name {}
-        });
+        // tokens.extend(quote! {
+        //     #[derive(Clone, Copy, Debug, Eq)]
+        //     pub struct #name;
+        //     impl Event for #name {}
+        // });
     }
 }
 

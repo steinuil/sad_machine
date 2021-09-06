@@ -1,3 +1,6 @@
+use std::{borrow::BorrowMut, collections::HashSet};
+
+use convert_case::Casing;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
@@ -10,7 +13,7 @@ use crate::sm::{
     event::{Event, Events},
     initial_state::InitialStates,
     state::{State, States},
-    transition::Transitions,
+    transition::{Transition, Transitions},
 };
 
 #[derive(Debug, PartialEq)]
@@ -40,10 +43,6 @@ impl Parse for Machines {
 
 impl ToTokens for Machines {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        tokens.extend(quote! {
-            use sm::{AsEnum, Initializer, Machine as M, Transition};
-        });
-
         for machine in &self.0 {
             machine.to_tokens(tokens);
         }
@@ -135,46 +134,45 @@ impl Parse for Machine {
 impl ToTokens for Machine {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let name = &self.name;
-        let initial_states = &self.initial_states;
+        // let initial_states = &self.initial_states;
         let states = &self.states();
         let events = &self.events();
         let machine_enum = MachineEnum { machine: &self };
         let transitions = &self.transitions;
 
         tokens.extend(quote! {
-            #[allow(non_snake_case)]
             mod #name {
-                use sm::{AsEnum, Event, InitialState, Initializer, Machine as M, NoneEvent, State, Transition};
+                // use sm::{AsEnum, Event, InitialState, Initializer, Machine as M, NoneEvent, State, Transition};
 
-                #[derive(Debug, Eq, PartialEq, Clone)]
-                pub struct Machine<S: State, E: Event>(S, Option<E>);
+                // #[derive(Debug, Eq, PartialEq, Clone)]
+                // pub struct Machine<S: State>(S);
 
-                impl<S: State, E: Event> M for Machine<S, E> {
-                    type State = S;
-                    type Event = E;
+                // impl<S: State> M for Machine<S> {
+                //     type State = S;
+                //     // type Event = E;
 
-                    fn state(&self) -> Self::State {
-                        self.0.clone()
-                    }
+                //     fn state(&self) -> Self::State {
+                //         self.0.clone()
+                //     }
 
-                    fn trigger(&self) -> Option<Self::Event> {
-                        self.1.clone()
-                    }
-                }
+                //     // fn trigger(&self) -> Option<Self::Event> {
+                //     //     self.1.clone()
+                //     // }
+                // }
 
-                impl<S: InitialState> Initializer<S> for Machine<S, NoneEvent> {
-                    type Machine = Machine<S, NoneEvent>;
+                // impl<S: InitialState> Initializer<S> for Machine<S> {
+                //     type Machine = Machine<S>;
 
-                    fn new(state: S) -> Self::Machine {
-                        Machine(state, Option::None)
-                    }
-                }
+                //     fn new(state: S) -> Self::Machine {
+                //         Machine(state)
+                //     }
+                // }
 
-                #states
-                #initial_states
-                #events
+                // #states
+                // #initial_states
+                // #events
                 #machine_enum
-                #transitions
+                // #transitions
             }
         });
     }
@@ -189,54 +187,222 @@ struct MachineEnum<'a> {
 #[allow(single_use_lifetimes)]
 impl<'a> ToTokens for MachineEnum<'a> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let mut variants = Vec::new();
-        let mut states = Vec::new();
-        let mut events = Vec::new();
+        // let mut variants: Vec<Ident> = Vec::new();
+        // let mut states: Vec<Ident> = Vec::new();
+        // let mut events: Vec<Ident> = Vec::new();
 
-        for s in &self.machine.initial_states.0 {
-            let name = s.name.clone();
-            let none = parse_quote! { NoneEvent };
-            let variant = Ident::new(&format!("Initial{}", name), Span::call_site());
+        // panic!("{:#?}", self.machine.transitions.0);
 
-            variants.push(variant);
-            states.push(name);
-            events.push(none);
-        }
+        // for t in &self.machine.transitions.0 {
+        for s in &self.machine.states() {
+            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
 
-        for t in &self.machine.transitions.0 {
-            let state = t.to.name.clone();
-            let event = t.event.name.clone();
-            let variant = Ident::new(&format!("{}By{}", state, event), Span::call_site());
+            let mut events = self
+                .machine
+                .transitions
+                .0
+                .iter()
+                .filter_map(|t| {
+                    if t.to.name.to_string() == s.name.to_string() {
+                        let event = Ident::new(&format!("From{}", t.event.name), Span::call_site());
+                        Some(event)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
 
-            if variants.contains(&variant) {
-                continue;
+            if self
+                .machine
+                .initial_states
+                .0
+                .iter()
+                .any(|is| is.name.to_string() == s.name.to_string())
+            {
+                events.push(Ident::new(&"FromInit", Span::call_site()));
             }
 
-            variants.push(variant);
-            states.push(state);
-            events.push(event);
+            let state_enum = &state_enum;
+            let events = &events;
+
+            tokens.extend(quote! {
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum #state_enum {
+                    #(#events),*
+                }
+            });
+
+            // let mut events_to: Vec<Ident> = Vec::new();
+            // let mut states_to: Vec<Ident> = Vec::new();
+            // let mut state_enums_to: Vec<Ident> = Vec::new();
+            // for t in self
+            //     .machine
+            //     .transitions
+            //     .0
+            //     .iter()
+            //     .filter(|t| t.from.name.to_string() == s.name.to_string())
+            // {
+            //     states_to.push(Ident::new(
+            //         format!("{}State", )
+            //         t.to.name.clone());
+            //     events_to.push(Ident::new(
+            //         &t.event.name.to_string().to_case(convert_case::Case::Snake),
+            //         t.event.name.span(),
+            //     ));
+            // }
         }
 
-        let variants = &variants;
+        let mut states: Vec<Ident> = Vec::new();
+        let mut state_enums: Vec<Ident> = Vec::new();
+
+        for s in &self.machine.states() {
+            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
+
+            states.push(s.name.clone());
+            state_enums.push(state_enum);
+        }
+
         let states = &states;
-        let events = &events;
+        let state_enums = &state_enums;
 
         tokens.extend(quote! {
-            #[derive(Debug, Clone)]
-            pub enum Variant {
-                #(#variants(Machine<#states, #events>)),*
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum State {
+                #(#states(#state_enums)),*
             }
-
-            #(
-                impl AsEnum for Machine<#states, #events> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::#variants(self)
-                    }
-                }
-            )*
         });
+
+        for s in &self.machine.states() {
+            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
+
+            let transitions = self
+                .machine
+                .transitions
+                .0
+                .iter()
+                .filter(|t| t.from.name.to_string() == s.name.to_string())
+                .cloned()
+                .collect::<Vec<Transition>>();
+
+            tokens.extend(quote! {
+                impl #state_enum {
+                    #(#transitions)*
+                }
+            })
+        }
+
+        let mut initializer_fns = Vec::new();
+        let mut initializer_enums = Vec::new();
+        let mut initializer_structs = Vec::new();
+        for s in &self.machine.initial_states.0 {
+            let init_fn = Ident::new(
+                &s.name.to_string().to_case(convert_case::Case::Snake),
+                Span::call_site(),
+            );
+            let init_enum = s.name.clone();
+            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
+
+            initializer_fns.push(init_fn);
+            initializer_enums.push(init_enum);
+            initializer_structs.push(state_enum);
+        }
+
+        tokens.extend(quote! {
+            #(pub fn #initializer_fns() -> State {
+                State::#initializer_enums(#initializer_structs::FromInit)
+            })*
+        })
+
+        // let mut variants: Vec<Ident> = Vec::new();
+        // let mut states: Vec<Ident> = Vec::new();
+        // let mut events: Vec<Ident> = Vec::new();
+
+        // for s in &self.machine.states() {
+        //     let name = s.name.clone();
+        //     let variant = Ident::new(&format!("{}_", name), Span::call_site());
+
+        //     variants.push(variant);
+        //     states.push(name);
+        // }
+
+        // for t in &self.machine.transitions.0 {
+        //     let event = t.event.name.clone();
+
+        //     if events.contains(&event) {
+        //         continue;
+        //     }
+
+        //     events.push(event);
+        // }
+
+        // tokens.extend(quote! {
+        //     #[derive(Debug, Clone)]
+        //     pub enum Variant {
+        //         #(#variants(Machine<#states>)),*
+        //     }
+        // })
+
+        // let mut variants: Vec<Ident> = Vec::new();
+        // let mut states: Vec<Ident> = Vec::new();
+        // let mut events: Vec<Ident> = Vec::new();
+
+        // for s in &self.machine.states().0 {
+        //     let name = s.name.clone();
+        //     let variant = Ident::new(&name.to_string(), Span::call_site());
+
+        //     variants.push(variant);
+
+        //     states.push(Ident::new(
+        //         &format!("{}State", &name.to_string()),
+        //         name.span(),
+        //     ));
+        // }
+        // for s in &self.machine.initial_states.0 {
+        //     let name = s.name.clone();
+        //     let none = parse_quote! { NoneEvent };
+        //     let variant = Ident::new(&format!("Initial{}", name), Span::call_site());
+
+        //     variants.push(variant);
+        //     states.push(name);
+        //     events.push(none);
+        // }
+
+        // for t in &self.machine.transitions.0 {
+        //     let state = t.to.name.clone();
+        //     let event = t.event.name.clone();
+        //     let variant = Ident::new(&format!("{}By{}", state, event), Span::call_site());
+
+        //     if variants.contains(&variant) {
+        //         continue;
+        //     }
+
+        //     variants.push(variant);
+        //     states.push(state);
+        //     events.push(event);
+        // }
+
+        // let variants = &variants;
+        // let states = &states;
+        // let events = &events;
+
+        // tokens.extend(quote! {
+        //     #[derive(Debug, Clone)]
+        //     pub enum Variant {
+        //         #(#variants(Machine<#states, #events>)),*
+        //     }
+
+        //     #(
+        //         impl AsEnum for Machine<#states, #events> {
+        //             type Enum = Variant;
+
+        //             fn as_enum(self) -> Self::Enum {
+        //                 Variant::#variants(self)
+        //             }
+        //         }
+        //     )*
+        // });
     }
 }
 
@@ -619,7 +785,6 @@ mod tests {
         let left = quote! {
             use sm::{AsEnum, Initializer, Machine as M, Transition};
 
-            #[allow(non_snake_case)]
             mod TurnStile {
                 use sm::{AsEnum, Event, InitialState, Initializer, Machine as M, NoneEvent, State, Transition};
 

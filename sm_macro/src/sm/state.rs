@@ -11,23 +11,23 @@ pub(crate) struct States(pub Vec<State>);
 
 impl ToTokens for States {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        for state in &self.0 {
-            state.to_tokens(tokens);
+        // for state in &self.0 {
+        //     state.to_tokens(tokens);
 
-            let name = &state.name;
-            for other in &self.0 {
-                let other = &other.name;
-                let eq = name == other;
+        //     let name = &state.name;
+        //     for other in &self.0 {
+        //         let other = &other.name;
+        //         let eq = name == other;
 
-                tokens.extend(quote! {
-                    impl PartialEq<#other> for #name {
-                        fn eq(&self, _: & #other) -> bool {
-                            #eq
-                        }
-                    }
-                });
-            }
-        }
+        //         tokens.extend(quote! {
+        //             impl PartialEq<#other> for #name {
+        //                 fn eq(&self, _: & #other) -> bool {
+        //                     #eq
+        //                 }
+        //             }
+        //         });
+        //     }
+        // }
     }
 }
 
@@ -61,13 +61,12 @@ impl Parse for State {
 
 impl ToTokens for State {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let name = &self.name;
+        // let name = &self.name;
 
-        tokens.extend(quote! {
-            #[derive(Clone, Copy, Debug, Eq)]
-            pub struct #name;
-            impl State for #name {}
-        });
+        // tokens.extend(quote! {
+        //     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        //     pub struct #name;
+        // });
     }
 }
 

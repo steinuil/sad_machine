@@ -1,4 +1,5 @@
-use proc_macro2::TokenStream;
+use convert_case::Casing;
+use proc_macro2::{Ident, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     braced,
@@ -78,7 +79,7 @@ impl ToTokens for Transitions {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Transition {
     pub event: Event,
     pub from: State,
@@ -87,19 +88,47 @@ pub(crate) struct Transition {
 
 impl ToTokens for Transition {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let event = &self.event.name;
-        let from = &self.from.name;
-        let to = &self.to.name;
+        // let event = &self.event.name;
+        // let from = &self.from.name;
+        // let to = &self.to.name;
+
+        let event_fn = Ident::new(
+            &self
+                .event
+                .name
+                .to_string()
+                .to_case(convert_case::Case::Snake),
+            self.event.name.span(),
+        );
+
+        // let to_enum = Ident::new(
+        //     &self
+        //         .to
+        //         .
+
+        // );
+
+        let to_enum = &self.to.name.clone();
+
+        let to_struct = Ident::new(&format!("{}State", self.to.name), self.to.name.span());
+
+        let event_enum = Ident::new(&format!("From{}", self.event.name), self.event.name.span());
 
         tokens.extend(quote! {
-            impl<E: Event> Transition<#event> for Machine<#from, E> {
-                type Machine = Machine<#to, #event>;
-
-                fn transition(self, event: #event) -> Self::Machine {
-                    Machine(#to, Some(event))
-                }
+            pub fn #event_fn(&self) -> State {
+                State::#to_enum(#to_struct::#event_enum)
             }
         });
+
+        // tokens.extend(quote! {
+        //     impl<E: Event> Transition<#event> for Machine<#from, E> {
+        //         type Machine = Machine<#to, #event>;
+
+        //         fn transition(self, event: #event) -> Self::Machine {
+        //             Machine(#to, Some(event))
+        //         }
+        //     }
+        // u);
     }
 }
 

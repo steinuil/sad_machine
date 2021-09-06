@@ -47,9 +47,9 @@ impl Parse for InitialStates {
 
 impl ToTokens for InitialStates {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        for state in &self.0 {
-            state.to_tokens(tokens);
-        }
+        // for state in &self.0 {
+        //     state.to_tokens(tokens);
+        // }
     }
 }
 
@@ -73,11 +73,11 @@ impl Parse for InitialState {
 
 impl ToTokens for InitialState {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let name = &self.name;
+        // let name = &self.name;
 
-        tokens.extend(quote! {
-            impl InitialState for #name {}
-        });
+        // tokens.extend(quote! {
+        //     impl InitialState for #name {}
+        // });
     }
 }
 

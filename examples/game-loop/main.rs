@@ -11,7 +11,7 @@ use std::{
 sm! {
     // `GameTick` is the name of our state machine. The machine handles a single
     // game tick (or a single run of the game loop) from start to finish.
-    GameTick {
+    game_tick {
         // `InitialStates` defines the states in which the machine can be
         // initialised. Any state not defined here cannot be used as the first
         // state when creating a new instance of the GameTick machine.
@@ -50,7 +50,7 @@ sm! {
 // verbose in the rest of our code. If we had defined multiple state machines,
 // we would not be able to do this in the global scope, as there would be
 // overlap in naming.
-use crate::GameTick::{Variant::*, *};
+// use crate::GameTick::{Variant::*, *};
 
 // We'll define the `Nanoseconds` alias to make it easier to reason about
 // numbers representing a timestamp.
@@ -243,7 +243,7 @@ fn main() {
         // mutable variable. We'll use this variable to assign a new machine
         // variant in the loop below, to allow the next step of the game loop to
         // go into the right matching arm.
-        let mut sm = Machine::new(Idle).as_enum();
+        let mut sm = game_tick::idle();
 
         // This inner loop moves the state machine forward from one state to the
         // next, until the end of the machine is reached. For each game tick,
@@ -259,7 +259,7 @@ fn main() {
                 //
                 // It is only triggered once in every game tick, since the state
                 // machine can only _once_ be in its "initial" mode.
-                InitialIdle(m) => {
+                game_tick::State::Idle(m) => {
                     handle_idle(&mut idle_count, &mut i);
 
                     let last_step_duration = last_step_timestamp.elapsed();
@@ -268,12 +268,12 @@ fn main() {
 
                     last_step_timestamp = Instant::now();
 
-                    m.transition(DrainAccumulatedTime).as_enum()
+                    m.drain_accumulated_time()
                 }
 
                 // Every time we end up in this match arm, we are asked to
                 // update the game state (for example, updating the physics).
-                UpdatingByDrainAccumulatedTime(m) => {
+                game_tick::State::Updating(m) => {
                     // We check if there's enough time accumulated to actually
                     // update a single game update. The required available time
                     // depends on the configured updates per second.
@@ -288,30 +288,30 @@ fn main() {
                         // state again, so that we can try to update the game
                         // another time, depending on if there is enough time
                         // left to do so.
-                        m.transition(DrainAccumulatedTime).as_enum()
+                        m.drain_accumulated_time()
 
                     // If not enough time remains to perform a game update, the
                     // state machine is advanced to the next state, which causes
                     // the game state to be rendered to the screen.
                     } else {
-                        m.transition(Render).as_enum()
+                        m.render()
                     }
                 }
 
                 // The rendering match arm is triggered _after_ the game has
                 // been updated. In this state, the current game state is
                 // rendered to the screen.
-                RenderingByRender(m) => {
+                game_tick::State::Rendering(m) => {
                     handle_render(&mut render_count, &mut tunables);
 
-                    m.transition(CompletedRendering).as_enum()
+                    m.completed_rendering()
                 }
 
                 // Finally, after the game state has been rendered, the
                 // execution of the current game tick is done. When this match
                 // arm is done executing, the game will transition to the start
                 // of the next tick.
-                FinishedByCompletedRendering(_) => break,
+                game_tick::State::Finished(_) => break,
             }
         }
 

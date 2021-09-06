@@ -6,11 +6,18 @@ license = "MIT OR Apache-2.0"
 description = "💋 SM – a static State Machine macro"
 repository = "https://github.com/rustic-games/sm"
 keywords = ["fsm", "state", "state-machine"]
-categories = ["game-engines", "no-std", "simulation", "science", "visualization"]
+categories = [
+    "game-engines",
+    "no-std",
+    "simulation",
+    "science",
+    "visualization",
+]
 readme = "crates-io.md"
 edition = "2018"
 
 [dependencies]
+convert_case = "0.4"
 proc-macro2 = "0.4"
 quote = "0.6"
 syn = "0.15"
