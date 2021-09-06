@@ -134,10 +134,10 @@ impl Parse for Machine {
 impl ToTokens for Machine {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let name = &self.name;
-        let states = &self.states();
-        let events = &self.events();
+        // let states = &self.states();
+        // let events = &self.events();
         let machine_enum = MachineEnum { machine: &self };
-        let transitions = &self.transitions;
+        // let transitions = &self.transitions;
 
         let initial_states = &self.initial_states;
 
@@ -160,13 +160,6 @@ struct MachineEnum<'a> {
 #[allow(single_use_lifetimes)]
 impl<'a> ToTokens for MachineEnum<'a> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // let mut variants: Vec<Ident> = Vec::new();
-        // let mut states: Vec<Ident> = Vec::new();
-        // let mut events: Vec<Ident> = Vec::new();
-
-        // panic!("{:#?}", self.machine.transitions.0);
-
-        // for t in &self.machine.transitions.0 {
         for s in &self.machine.states() {
             let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
 
@@ -206,45 +199,12 @@ impl<'a> ToTokens for MachineEnum<'a> {
                     #(#events),*
                 }
             });
-
-            // let mut events_to: Vec<Ident> = Vec::new();
-            // let mut states_to: Vec<Ident> = Vec::new();
-            // let mut state_enums_to: Vec<Ident> = Vec::new();
-            // for t in self
-            //     .machine
-            //     .transitions
-            //     .0
-            //     .iter()
-            //     .filter(|t| t.from.name.to_string() == s.name.to_string())
-            // {
-            //     states_to.push(Ident::new(
-            //         format!("{}State", )
-            //         t.to.name.clone());
-            //     events_to.push(Ident::new(
-            //         &t.event.name.to_string().to_case(convert_case::Case::Snake),
-            //         t.event.name.span(),
-            //     ));
-            // }
         }
 
-        let mut states: Vec<Ident> = Vec::new();
-        let mut state_enums: Vec<Ident> = Vec::new();
-
-        for s in &self.machine.states() {
-            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
-
-            states.push(s.name.clone());
-            state_enums.push(state_enum);
-        }
-
-        let states = &states;
-        let state_enums = &state_enums;
+        let states = &self.machine.states();
 
         tokens.extend(quote! {
-            #[derive(Debug, Clone, PartialEq, Eq)]
-            pub enum State {
-                #(#states(#state_enums)),*
-            }
+            #states
         });
 
         for s in &self.machine.states() {

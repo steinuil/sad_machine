@@ -11,23 +11,14 @@ pub(crate) struct States(pub Vec<State>);
 
 impl ToTokens for States {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // for state in &self.0 {
-        //     state.to_tokens(tokens);
+        let states = &self.0;
 
-        //     let name = &state.name;
-        //     for other in &self.0 {
-        //         let other = &other.name;
-        //         let eq = name == other;
-
-        //         tokens.extend(quote! {
-        //             impl PartialEq<#other> for #name {
-        //                 fn eq(&self, _: & #other) -> bool {
-        //                     #eq
-        //                 }
-        //             }
-        //         });
-        //     }
-        // }
+        tokens.extend(quote! {
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum State {
+                #(#states),*
+            }
+        })
     }
 }
 
@@ -61,12 +52,12 @@ impl Parse for State {
 
 impl ToTokens for State {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // let name = &self.name;
+        let name = &self.name;
+        let struct_name = Ident::new(&format!("{}State", self.name), self.name.span());
 
-        // tokens.extend(quote! {
-        //     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        //     pub struct #name;
-        // });
+        tokens.extend(quote! {
+            #name(#struct_name)
+        })
     }
 }
 
@@ -93,9 +84,7 @@ mod tests {
         };
 
         let left = quote! {
-            #[derive(Clone, Copy, Debug, Eq)]
-            pub struct Unlocked;
-            impl State for Unlocked {}
+            Unlocked(UnlockedState)
         };
 
         let mut right = TokenStream::new();
@@ -116,36 +105,10 @@ mod tests {
         ]);
 
         let left = quote! {
-            #[derive(Clone, Copy, Debug, Eq)]
-            pub struct Locked;
-            impl State for Locked {}
-
-            impl PartialEq<Locked> for Locked {
-                fn eq(&self, _: &Locked) -> bool {
-                    true
-                }
-            }
-
-            impl PartialEq<Unlocked> for Locked {
-                fn eq(&self, _: &Unlocked) -> bool {
-                    false
-                }
-            }
-
-            #[derive(Clone, Copy, Debug, Eq)]
-            pub struct Unlocked;
-            impl State for Unlocked {}
-
-            impl PartialEq<Locked> for Unlocked {
-                fn eq(&self, _: & Locked) -> bool {
-                    false
-                }
-            }
-
-            impl PartialEq<Unlocked> for Unlocked {
-                fn eq(&self, _: & Unlocked) -> bool {
-                    true
-                }
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum State {
+                Locked(LockedState),
+                Unlocked(UnlockedState)
             }
         };
 
