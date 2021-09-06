@@ -1,7 +1,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{quote, ToTokens};
 
-use crate::sm::{
+use crate::{
     state::States,
     transition::{Transition, Transitions},
 };
@@ -41,7 +41,7 @@ impl<'a> ToTokens for StateTransitions<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::sm::{event::Event, state::State};
+    use crate::{event::Event, state::State};
 
     use super::*;
     use syn::parse_quote;

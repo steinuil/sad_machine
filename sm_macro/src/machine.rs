@@ -8,7 +8,7 @@ use syn::{
     Ident,
 };
 
-use crate::sm::{
+use crate::{
     initial_state::InitialStates,
     state::{State, States},
     state_transition::StateTransitions,
@@ -147,7 +147,7 @@ impl ToTokens for Machine {
 #[cfg(test)]
 mod machines_tests {
     use super::*;
-    use crate::sm::{event::Event, initial_state::InitialState, transition::Transition};
+    use crate::{event::Event, initial_state::InitialState, transition::Transition};
     use proc_macro2::TokenStream;
     use syn::{self, parse_quote};
 
@@ -584,7 +584,7 @@ impl<'a> ToTokens for MachineEnum<'a> {
 #[cfg(test)]
 mod machine_enum_tests {
     use super::*;
-    use crate::sm::{event::Event, initial_state::InitialState, transition::Transition};
+    use crate::{event::Event, initial_state::InitialState, transition::Transition};
     use proc_macro2::TokenStream;
     use syn::{self, parse_quote};
 

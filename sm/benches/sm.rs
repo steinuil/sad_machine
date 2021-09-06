@@ -23,9 +23,6 @@ sm! {
     }
 }
 
-use self::GameLoop::Variant::*;
-use self::GameLoop::*;
-
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("base - Idle . Simulating . Idle . Rendering . Idle", |b| {
         b.iter(|| {

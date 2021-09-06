@@ -8,7 +8,7 @@ use syn::{
     Token,
 };
 
-use crate::sm::{event::Event, state::State};
+use crate::{event::Event, state::State};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Transitions(pub Vec<Transition>);

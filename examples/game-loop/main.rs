@@ -2,13 +2,13 @@ use rand::{
     distributions::{Distribution, Uniform},
     prelude::*,
 };
-use sm::sm;
+use sm::state_machine;
 use std::{
     ops::Add,
     time::{Duration, Instant},
 };
 
-sm! {
+state_machine! {
     // `GameTick` is the name of our state machine. The machine handles a single
     // game tick (or a single run of the game loop) from start to finish.
     game_tick {

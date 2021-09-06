@@ -1,8 +1,4 @@
-//! This is a support crate that contains the function-like procedural macro to
-//! build state machines using the [sm] crate. All documentation lives in that
-//! crate.
-//!
-//! [sm]: https://docs.rs/sm
+//! state_machine macro
 
 // quote! macro needs a higher recursion limit
 #![recursion_limit = "512"]
@@ -29,18 +25,21 @@
     unused
 )]
 
-use crate::sm::machine::Machines;
+use crate::machine::Machines;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
 
-mod sm;
+mod event;
+mod initial_state;
+mod machine;
+mod state;
+mod state_transition;
+mod transition;
 
 /// Generate the declaratively described state machine diagram.
-///
-/// See the main crate documentation for more details.
 #[proc_macro]
-pub fn sm(input: TokenStream) -> TokenStream {
+pub fn state_machine(input: TokenStream) -> TokenStream {
     let machines: Machines = parse_macro_input!(input as Machines);
 
     quote!(#machines).into()
