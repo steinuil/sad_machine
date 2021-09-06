@@ -1,19 +1,18 @@
-use std::{borrow::BorrowMut, collections::HashSet};
+use std::collections::HashSet;
 
-use convert_case::Casing;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     braced,
     parse::{Parse, ParseStream, Result},
-    parse_quote, Ident,
+    Ident,
 };
 
 use crate::sm::{
-    event::{Event, Events},
     initial_state::InitialStates,
     state::{State, States},
-    transition::{Transition, Transitions},
+    state_transition::StateTransitions,
+    transition::Transitions,
 };
 
 #[derive(Debug, PartialEq)]
@@ -80,18 +79,6 @@ impl Machine {
 
         States(states)
     }
-
-    fn events(&self) -> Events {
-        let mut events: Vec<Event> = Vec::new();
-
-        for t in &self.transitions.0 {
-            if !events.iter().any(|s| s.name == t.event.name) {
-                events.push(t.event.clone());
-            }
-        }
-
-        Events(events)
-    }
 }
 
 impl Parse for Machine {
@@ -134,111 +121,40 @@ impl Parse for Machine {
 impl ToTokens for Machine {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let name = &self.name;
-        // let states = &self.states();
-        // let events = &self.events();
+
         let machine_enum = MachineEnum { machine: &self };
-        // let transitions = &self.transitions;
 
         let initial_states = &self.initial_states;
+
+        let states = &self.states();
+
+        let state_transitions = StateTransitions {
+            states,
+            transitions: &self.transitions,
+        };
 
         tokens.extend(quote! {
             mod #name {
                 #machine_enum
-
+                #states
                 #initial_states
+                #state_transitions
             }
         });
-    }
-}
-
-#[derive(Debug)]
-#[allow(single_use_lifetimes)]
-struct MachineEnum<'a> {
-    machine: &'a Machine,
-}
-
-#[allow(single_use_lifetimes)]
-impl<'a> ToTokens for MachineEnum<'a> {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for s in &self.machine.states() {
-            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
-
-            let mut events = self
-                .machine
-                .transitions
-                .0
-                .iter()
-                .filter_map(|t| {
-                    if t.to.name.to_string() == s.name.to_string() {
-                        let event = Ident::new(&format!("From{}", t.event.name), Span::call_site());
-                        Some(event)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .collect::<Vec<_>>();
-
-            if self
-                .machine
-                .initial_states
-                .0
-                .iter()
-                .any(|is| is.name.to_string() == s.name.to_string())
-            {
-                events.push(Ident::new(&"FromInit", Span::call_site()));
-            }
-
-            let state_enum = &state_enum;
-            let events = &events;
-
-            tokens.extend(quote! {
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum #state_enum {
-                    #(#events),*
-                }
-            });
-        }
-
-        let states = &self.machine.states();
-
-        tokens.extend(quote! {
-            #states
-        });
-
-        for s in &self.machine.states() {
-            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
-
-            let transitions = self
-                .machine
-                .transitions
-                .0
-                .iter()
-                .filter(|t| t.from.name.to_string() == s.name.to_string())
-                .cloned()
-                .collect::<Vec<Transition>>();
-
-            tokens.extend(quote! {
-                impl #state_enum {
-                    #(#transitions)*
-                }
-            })
-        }
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod machines_tests {
     use super::*;
-    use crate::sm::{initial_state::InitialState, transition::Transition};
+    use crate::sm::{event::Event, initial_state::InitialState, transition::Transition};
     use proc_macro2::TokenStream;
     use syn::{self, parse_quote};
 
     #[test]
     fn test_machine_parse() {
         let left: Machine = syn::parse2(quote! {
-           TurnStile {
+           turn_stile {
                InitialStates { Locked, Unlocked }
 
                Coin { Locked => Unlocked }
@@ -248,7 +164,7 @@ mod tests {
         .unwrap();
 
         let right = Machine {
-            name: parse_quote! { TurnStile },
+            name: parse_quote! { turn_stile },
             initial_states: InitialStates(vec![
                 InitialState {
                     name: parse_quote! { Locked },
@@ -289,7 +205,7 @@ mod tests {
     #[test]
     fn test_machine_to_tokens() {
         let machine = Machine {
-            name: parse_quote! { TurnStile },
+            name: parse_quote! { turn_stile },
             initial_states: InitialStates(vec![
                 InitialState {
                     name: parse_quote! { Unlocked },
@@ -312,115 +228,35 @@ mod tests {
         };
 
         let left = quote! {
-            #[allow(non_snake_case)]
-            mod TurnStile {
-                use sm::{AsEnum, Event, InitialState, Initializer, Machine as M, NoneEvent, State, Transition};
-
-                #[derive(Debug, Eq, PartialEq, Clone)]
-                pub struct Machine<S: State, E: Event>(S, Option<E>);
-
-                impl<S: State, E: Event> M for Machine<S, E> {
-                    type State = S;
-                    type Event = E;
-
-                    fn state(&self) -> Self::State {
-                        self.0.clone()
-                    }
-
-                    fn trigger(&self) -> Option<Self::Event> {
-                        self.1.clone()
-                    }
+            mod turn_stile {
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum UnlockedState {
+                    FromInit
                 }
 
-                impl<S: InitialState> Initializer<S> for Machine<S, NoneEvent> {
-                    type Machine = Machine<S, NoneEvent>;
-
-                    fn new(state: S) -> Self::Machine {
-                        Machine(state, Option::None)
-                    }
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum LockedState {
+                    FromPush,
+                    FromInit
                 }
 
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Unlocked;
-                impl State for Unlocked {}
-
-                impl PartialEq<Unlocked> for Unlocked {
-                    fn eq(&self, _: & Unlocked) -> bool {
-                        true
-                    }
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum State {
+                    Unlocked(UnlockedState),
+                    Locked(LockedState)
                 }
 
-                impl PartialEq<Locked> for Unlocked {
-                    fn eq(&self, _: & Locked) -> bool {
-                        false
-                    }
+                pub fn unlocked() -> State {
+                    State::Unlocked(UnlockedState::FromInit)
                 }
 
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Locked;
-                impl State for Locked {}
-
-                impl PartialEq<Unlocked> for Locked {
-                    fn eq(&self, _: &Unlocked) -> bool {
-                        false
-                    }
+                pub fn locked() -> State {
+                    State::Locked(LockedState::FromInit)
                 }
 
-                impl PartialEq<Locked> for Locked {
-                    fn eq(&self, _: &Locked) -> bool {
-                        true
-                    }
-                }
-
-                impl InitialState for Unlocked {}
-                impl InitialState for Locked {}
-
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Push;
-                impl Event for Push {}
-
-                impl PartialEq<Push> for Push {
-                    fn eq(&self, _: &Push) -> bool {
-                        true
-                    }
-                }
-
-                #[derive(Debug, Clone)]
-                pub enum Variant {
-                    InitialUnlocked(Machine<Unlocked, NoneEvent>),
-                    InitialLocked(Machine<Locked, NoneEvent>),
-                    LockedByPush(Machine<Locked, Push>)
-                }
-
-                impl AsEnum for Machine<Unlocked, NoneEvent> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::InitialUnlocked(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Locked, NoneEvent> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::InitialLocked(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Locked, Push> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::LockedByPush(self)
-                    }
-                }
-
-                impl<E: Event> Transition<Push> for Machine<Unlocked, E> {
-                    type Machine = Machine<Locked, Push>;
-
-                    fn transition(self, event: Push) -> Self::Machine {
-                        Machine(Locked, Some(event))
+                impl UnlockedState {
+                    pub fn push(&self) -> State {
+                        State::Locked(LockedState::FromPush)
                     }
                 }
             }
@@ -435,7 +271,7 @@ mod tests {
     #[test]
     fn test_machines_parse() {
         let left: Machines = syn::parse2(quote! {
-           TurnStile {
+           turn_stile {
                InitialStates { Locked, Unlocked }
 
                Coin { Locked => Unlocked }
@@ -455,7 +291,7 @@ mod tests {
 
         let right = Machines(vec![
             Machine {
-                name: parse_quote! { TurnStile },
+                name: parse_quote! { turn_stile },
                 initial_states: InitialStates(vec![
                     InitialState {
                         name: parse_quote! { Locked },
@@ -533,7 +369,7 @@ mod tests {
     fn test_machines_to_tokens() {
         let machines = Machines(vec![
             Machine {
-                name: parse_quote! { TurnStile },
+                name: parse_quote! { turn_stile },
                 initial_states: InitialStates(vec![
                     InitialState {
                         name: parse_quote! { Locked },
@@ -568,7 +404,7 @@ mod tests {
                 ]),
             },
             Machine {
-                name: parse_quote! { Lock },
+                name: parse_quote! { lock },
                 initial_states: InitialStates(vec![
                     InitialState {
                         name: parse_quote! { Locked },
@@ -605,284 +441,82 @@ mod tests {
         ]);
 
         let left = quote! {
-            use sm::{AsEnum, Initializer, Machine as M, Transition};
-
-            mod TurnStile {
-                use sm::{AsEnum, Event, InitialState, Initializer, Machine as M, NoneEvent, State, Transition};
-
-                #[derive(Debug, Eq, PartialEq, Clone)]
-                pub struct Machine<S: State, E: Event>(S, Option<E>);
-
-                impl<S: State, E: Event> M for Machine<S, E> {
-                    type State = S;
-                    type Event = E;
-
-                    fn state(&self) -> Self::State {
-                        self.0.clone()
-                    }
-
-                    fn trigger(&self) -> Option<Self::Event> {
-                        self.1.clone()
-                    }
+            mod turn_stile {
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum LockedState {
+                    FromPush,
+                    FromInit
                 }
 
-                impl<S: InitialState> Initializer<S> for Machine<S, NoneEvent> {
-                    type Machine = Machine<S, NoneEvent>;
-
-                    fn new(state: S) -> Self::Machine {
-                        Machine(state, Option::None)
-                    }
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum UnlockedState {
+                    FromCoin,
+                    FromInit
                 }
 
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Locked;
-                impl State for Locked {}
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum State {
+                    Locked(LockedState),
+                    Unlocked(UnlockedState)
+                }
 
-                impl PartialEq<Locked> for Locked {
-                    fn eq(&self, _: &Locked) -> bool {
-                        true
+                pub fn locked() -> State {
+                    State::Locked(LockedState::FromInit)
+                }
+
+                pub fn unlocked() -> State {
+                    State::Unlocked(UnlockedState::FromInit)
+                }
+
+                impl LockedState {
+                    pub fn coin(&self) -> State {
+                        State::Unlocked(UnlockedState::FromCoin)
                     }
                 }
 
-                impl PartialEq<Unlocked> for Locked {
-                    fn eq(&self, _: &Unlocked) -> bool {
-                        false
-                    }
-                }
-
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Unlocked;
-                impl State for Unlocked {}
-
-                impl PartialEq<Locked> for Unlocked {
-                    fn eq(&self, _: & Locked) -> bool {
-                        false
-                    }
-                }
-
-                impl PartialEq<Unlocked> for Unlocked {
-                    fn eq(&self, _: & Unlocked) -> bool {
-                        true
-                    }
-                }
-
-                impl InitialState for Locked {}
-                impl InitialState for Unlocked {}
-
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Coin;
-                impl Event for Coin {}
-
-                impl PartialEq<Coin> for Coin {
-                    fn eq(&self, _: &Coin) -> bool {
-                        true
-                    }
-                }
-
-                impl PartialEq<Push> for Coin {
-                    fn eq(&self, _: &Push) -> bool {
-                        false
-                    }
-                }
-
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Push;
-                impl Event for Push {}
-
-                impl PartialEq<Coin> for Push {
-                    fn eq(&self, _: &Coin) -> bool {
-                        false
-                    }
-                }
-
-                impl PartialEq<Push> for Push {
-                    fn eq(&self, _: &Push) -> bool {
-                        true
-                    }
-                }
-
-                #[derive(Debug, Clone)]
-                pub enum Variant {
-                    InitialLocked(Machine<Locked, NoneEvent>),
-                    InitialUnlocked(Machine<Unlocked, NoneEvent>),
-                    UnlockedByCoin(Machine<Unlocked, Coin>),
-                    LockedByPush(Machine<Locked, Push>)
-                }
-
-                impl AsEnum for Machine<Locked, NoneEvent> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::InitialLocked(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Unlocked, NoneEvent> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::InitialUnlocked(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Unlocked, Coin> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::UnlockedByCoin(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Locked, Push> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::LockedByPush(self)
-                    }
-                }
-
-                impl<E: Event> Transition<Coin> for Machine<Locked, E> {
-                    type Machine = Machine<Unlocked, Coin>;
-
-                    fn transition(self, event: Coin) -> Self::Machine {
-                        Machine(Unlocked, Some(event))
-                    }
-                }
-
-                impl<E: Event> Transition<Push> for Machine<Unlocked, E> {
-                    type Machine = Machine<Locked, Push>;
-
-                    fn transition(self, event: Push) -> Self::Machine {
-                        Machine(Locked, Some(event))
+                impl UnlockedState {
+                    pub fn push(&self) -> State {
+                        State::Locked(LockedState::FromPush)
                     }
                 }
             }
 
-            #[allow(non_snake_case)]
-            mod Lock {
-                use sm::{AsEnum, Event, InitialState, Initializer, Machine as M, NoneEvent, State, Transition};
-
-                #[derive(Debug, Eq, PartialEq, Clone)]
-                pub struct Machine<S: State, E: Event>(S, Option<E>);
-
-                impl<S: State, E: Event> M for Machine<S, E> {
-                    type State = S;
-                    type Event = E;
-
-                    fn state(&self) -> Self::State {
-                        self.0.clone()
-                    }
-
-                    fn trigger(&self) -> Option<Self::Event> {
-                        self.1.clone()
-                    }
+            mod lock {
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum LockedState {
+                    FromTurnKey,
+                    FromInit
                 }
 
-                impl<S: InitialState> Initializer<S> for Machine<S, NoneEvent> {
-                    type Machine = Machine<S, NoneEvent>;
-
-                    fn new(state: S) -> Self::Machine {
-                        Machine(state, Option::None)
-                    }
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum UnlockedState {
+                    FromTurnKey,
+                    FromInit
                 }
 
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Locked;
-                impl State for Locked {}
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum State {
+                    Locked(LockedState),
+                    Unlocked(UnlockedState)
+                }
 
-                impl PartialEq<Locked> for Locked {
-                    fn eq(&self, _: &Locked) -> bool {
-                        true
+                pub fn locked() -> State {
+                    State::Locked(LockedState::FromInit)
+                }
+
+                pub fn unlocked() -> State {
+                    State::Unlocked(UnlockedState::FromInit)
+                }
+
+                impl LockedState {
+                    pub fn turn_key(&self) -> State {
+                        State::Unlocked(UnlockedState::FromTurnKey)
                     }
                 }
 
-                impl PartialEq<Unlocked> for Locked {
-                    fn eq(&self, _: &Unlocked) -> bool {
-                        false
-                    }
-                }
-
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct Unlocked;
-                impl State for Unlocked {}
-
-                impl PartialEq<Locked> for Unlocked {
-                    fn eq(&self, _: & Locked) -> bool {
-                        false
-                    }
-                }
-
-                impl PartialEq<Unlocked> for Unlocked {
-                    fn eq(&self, _: & Unlocked) -> bool {
-                        true
-                    }
-                }
-
-                impl InitialState for Locked {}
-                impl InitialState for Unlocked {}
-
-                #[derive(Clone, Copy, Debug, Eq)]
-                pub struct TurnKey;
-                impl Event for TurnKey {}
-
-                impl PartialEq<TurnKey> for TurnKey {
-                    fn eq(&self, _: &TurnKey) -> bool {
-                        true
-                    }
-                }
-
-                #[derive(Debug, Clone)]
-                pub enum Variant {
-                    InitialLocked(Machine<Locked, NoneEvent>),
-                    InitialUnlocked(Machine<Unlocked, NoneEvent>),
-                    UnlockedByTurnKey(Machine<Unlocked, TurnKey>),
-                    LockedByTurnKey(Machine<Locked, TurnKey>)
-                }
-
-                impl AsEnum for Machine<Locked, NoneEvent> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::InitialLocked(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Unlocked, NoneEvent> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::InitialUnlocked(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Unlocked, TurnKey> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::UnlockedByTurnKey(self)
-                    }
-                }
-
-                impl AsEnum for Machine<Locked, TurnKey> {
-                    type Enum = Variant;
-
-                    fn as_enum(self) -> Self::Enum {
-                        Variant::LockedByTurnKey(self)
-                    }
-                }
-                impl<E: Event> Transition<TurnKey> for Machine<Locked, E> {
-                    type Machine = Machine<Unlocked, TurnKey>;
-
-                    fn transition(self, event: TurnKey) -> Self::Machine {
-                        Machine(Unlocked, Some(event))
-                    }
-                }
-
-                impl<E: Event> Transition<TurnKey> for Machine<Unlocked, E> {
-                    type Machine = Machine<Locked, TurnKey>;
-
-                    fn transition(self, event: TurnKey) -> Self::Machine {
-                        Machine(Locked, Some(event))
+                impl UnlockedState {
+                    pub fn turn_key(&self) -> State {
+                        State::Locked(LockedState::FromTurnKey)
                     }
                 }
             }
@@ -890,6 +524,126 @@ mod tests {
 
         let mut right = TokenStream::new();
         machines.to_tokens(&mut right);
+
+        assert_eq!(format!("{}", left), format!("{}", right))
+    }
+}
+
+#[derive(Debug)]
+#[allow(single_use_lifetimes)]
+struct MachineEnum<'a> {
+    machine: &'a Machine,
+}
+
+#[allow(single_use_lifetimes)]
+impl<'a> ToTokens for MachineEnum<'a> {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        for s in &self.machine.states() {
+            let state_enum = Ident::new(&format!("{}State", s.name), Span::call_site());
+
+            let mut events = self
+                .machine
+                .transitions
+                .0
+                .iter()
+                .filter_map(|t| {
+                    if t.to.name.to_string() == s.name.to_string() {
+                        let event = Ident::new(&format!("From{}", t.event.name), Span::call_site());
+                        Some(event)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            if self
+                .machine
+                .initial_states
+                .0
+                .iter()
+                .any(|is| is.name.to_string() == s.name.to_string())
+            {
+                events.push(Ident::new(&"FromInit", Span::call_site()));
+            }
+
+            let state_enum = &state_enum;
+            let events = &events;
+
+            tokens.extend(quote! {
+                #[derive(Debug, Clone, PartialEq, Eq)]
+                pub enum #state_enum {
+                    #(#events),*
+                }
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod machine_enum_tests {
+    use super::*;
+    use crate::sm::{event::Event, initial_state::InitialState, transition::Transition};
+    use proc_macro2::TokenStream;
+    use syn::{self, parse_quote};
+
+    #[test]
+    fn test_machine_enum_to_tokens() {
+        let machine = Machine {
+            name: parse_quote! { turn_stile },
+            initial_states: InitialStates(vec![
+                InitialState {
+                    name: parse_quote! { Locked },
+                },
+                InitialState {
+                    name: parse_quote! { Unlocked },
+                },
+            ]),
+            transitions: Transitions(vec![
+                Transition {
+                    event: Event {
+                        name: parse_quote! { Coin },
+                    },
+                    from: State {
+                        name: parse_quote! { Locked },
+                    },
+                    to: State {
+                        name: parse_quote! { Unlocked },
+                    },
+                },
+                Transition {
+                    event: Event {
+                        name: parse_quote! { Push },
+                    },
+                    from: State {
+                        name: parse_quote! { Unlocked },
+                    },
+                    to: State {
+                        name: parse_quote! { Locked },
+                    },
+                },
+            ]),
+        };
+
+        let machine_enum = MachineEnum { machine: &machine };
+
+        let left = quote! {
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum LockedState {
+                FromPush,
+                FromInit
+            }
+
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum UnlockedState {
+                FromCoin,
+                FromInit
+            }
+        };
+
+        let mut right = TokenStream::new();
+        machine_enum.to_tokens(&mut right);
 
         assert_eq!(format!("{}", left), format!("{}", right))
     }
