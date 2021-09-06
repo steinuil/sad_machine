@@ -1,4 +1,5 @@
-use proc_macro2::TokenStream;
+use convert_case::Casing;
+use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     braced,
@@ -47,9 +48,9 @@ impl Parse for InitialStates {
 
 impl ToTokens for InitialStates {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // for state in &self.0 {
-        //     state.to_tokens(tokens);
-        // }
+        for state in &self.0 {
+            state.to_tokens(tokens);
+        }
     }
 }
 
@@ -73,11 +74,18 @@ impl Parse for InitialState {
 
 impl ToTokens for InitialState {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // let name = &self.name;
+        let fn_name = Ident::new(
+            &self.name.to_string().to_case(convert_case::Case::Snake),
+            self.name.span(),
+        );
+        let variant_name = &self.name;
+        let struct_name = Ident::new(&format!("{}State", &self.name), Span::call_site());
 
-        // tokens.extend(quote! {
-        //     impl InitialState for #name {}
-        // });
+        tokens.extend(quote! {
+            pub fn #fn_name() -> State {
+                State::#variant_name(#struct_name::FromInit)
+            }
+        })
     }
 }
 
