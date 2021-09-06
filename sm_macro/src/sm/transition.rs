@@ -88,10 +88,6 @@ pub(crate) struct Transition {
 
 impl ToTokens for Transition {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        // let event = &self.event.name;
-        // let from = &self.from.name;
-        // let to = &self.to.name;
-
         let event_fn = Ident::new(
             &self
                 .event
@@ -101,13 +97,6 @@ impl ToTokens for Transition {
             self.event.name.span(),
         );
 
-        // let to_enum = Ident::new(
-        //     &self
-        //         .to
-        //         .
-
-        // );
-
         let to_enum = &self.to.name.clone();
 
         let to_struct = Ident::new(&format!("{}State", self.to.name), self.to.name.span());
@@ -115,20 +104,10 @@ impl ToTokens for Transition {
         let event_enum = Ident::new(&format!("From{}", self.event.name), self.event.name.span());
 
         tokens.extend(quote! {
-            pub fn #event_fn(&self) -> State {
-                State::#to_enum(#to_struct::#event_enum)
+            pub fn #event_fn(&self) -> Self {
+                Self::#to_enum(#to_struct::#event_enum)
             }
         });
-
-        // tokens.extend(quote! {
-        //     impl<E: Event> Transition<#event> for Machine<#from, E> {
-        //         type Machine = Machine<#to, #event>;
-
-        //         fn transition(self, event: #event) -> Self::Machine {
-        //             Machine(#to, Some(event))
-        //         }
-        //     }
-        // u);
     }
 }
 
@@ -153,12 +132,8 @@ mod tests {
         };
 
         let left = quote! {
-            impl<E: Event> Transition<Push> for Machine<Locked, E> {
-                type Machine = Machine<Unlocked, Push>;
-
-                fn transition(self, event: Push) -> Self::Machine {
-                    Machine(Unlocked, Some(event))
-                }
+            pub fn push(&self) -> Self {
+                Self::Unlocked(UnlockedState::FromPush)
             }
         };
 
@@ -276,36 +251,20 @@ mod tests {
         ]);
 
         let left = quote! {
-            impl<E: Event> Transition<Push> for Machine<Locked, E> {
-                type Machine = Machine<Locked, Push>;
-
-                fn transition(self, event: Push) -> Self::Machine {
-                    Machine(Locked, Some(event))
-                }
+            pub fn push(&self) -> Self {
+                Self::Locked(LockedState::FromPush)
             }
 
-            impl<E: Event> Transition<Push> for Machine<Unlocked, E> {
-                type Machine = Machine<Locked, Push>;
-
-                fn transition(self, event: Push) -> Self::Machine {
-                    Machine(Locked, Some(event))
-                }
+            pub fn push(&self) -> Self {
+                Self::Locked(LockedState::FromPush)
             }
 
-            impl<E: Event> Transition<Coin> for Machine<Locked, E> {
-                type Machine = Machine<Unlocked, Coin>;
-
-                fn transition(self, event: Coin) -> Self::Machine {
-                    Machine(Unlocked, Some(event))
-                }
+            pub fn coin(&self) -> Self {
+                Self::Unlocked(UnlockedState::FromCoin)
             }
 
-            impl<E: Event> Transition<Coin> for Machine<Unlocked, E> {
-                type Machine = Machine<Unlocked, Coin>;
-
-                fn transition(self, event: Coin) -> Self::Machine {
-                    Machine(Unlocked, Some(event))
-                }
+            pub fn coin(&self) -> Self {
+                Self::Unlocked(UnlockedState::FromCoin)
             }
         };
 
