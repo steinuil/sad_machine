@@ -104,7 +104,9 @@ mod tests {
         };
 
         let left = quote! {
-            impl InitialState for Unlocked {}
+            pub fn unlocked() -> State {
+                State::Unlocked(UnlockedState::FromInit)
+            }
         };
 
         let mut right = TokenStream::new();
@@ -144,8 +146,13 @@ mod tests {
         ]);
 
         let left = quote! {
-            impl InitialState for Locked {}
-            impl InitialState for Unlocked {}
+            pub fn locked() -> State {
+                State::Locked(LockedState::FromInit)
+            }
+
+            pub fn unlocked() -> State {
+                State::Unlocked(UnlockedState::FromInit)
+            }
         };
 
         let mut right = TokenStream::new();
