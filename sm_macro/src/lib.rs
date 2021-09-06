@@ -20,7 +20,6 @@
 )]
 #![warn(
     missing_docs,
-    non_snake_case,
     rust_2018_idioms,
     single_use_lifetimes,
     unused_import_braces,
@@ -29,9 +28,6 @@
     unused_results,
     unused
 )]
-#![deny(clippy::all)]
-
-extern crate proc_macro;
 
 use crate::sm::machine::Machines;
 use proc_macro::TokenStream;
