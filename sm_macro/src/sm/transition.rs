@@ -104,8 +104,8 @@ impl ToTokens for Transition {
         let event_enum = Ident::new(&format!("From{}", self.event.name), self.event.name.span());
 
         tokens.extend(quote! {
-            pub fn #event_fn(&self) -> Self {
-                Self::#to_enum(#to_struct::#event_enum)
+            pub fn #event_fn(&self) -> State {
+                State::#to_enum(#to_struct::#event_enum)
             }
         });
     }
@@ -132,8 +132,8 @@ mod tests {
         };
 
         let left = quote! {
-            pub fn push(&self) -> Self {
-                Self::Unlocked(UnlockedState::FromPush)
+            pub fn push(&self) -> State {
+                State::Unlocked(UnlockedState::FromPush)
             }
         };
 
@@ -251,20 +251,20 @@ mod tests {
         ]);
 
         let left = quote! {
-            pub fn push(&self) -> Self {
-                Self::Locked(LockedState::FromPush)
+            pub fn push(&self) -> State {
+                State::Locked(LockedState::FromPush)
             }
 
-            pub fn push(&self) -> Self {
-                Self::Locked(LockedState::FromPush)
+            pub fn push(&self) -> State {
+                State::Locked(LockedState::FromPush)
             }
 
-            pub fn coin(&self) -> Self {
-                Self::Unlocked(UnlockedState::FromCoin)
+            pub fn coin(&self) -> State {
+                State::Unlocked(UnlockedState::FromCoin)
             }
 
-            pub fn coin(&self) -> Self {
-                Self::Unlocked(UnlockedState::FromCoin)
+            pub fn coin(&self) -> State {
+                State::Unlocked(UnlockedState::FromCoin)
             }
         };
 
