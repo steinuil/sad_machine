@@ -46,14 +46,6 @@ impl Parse for InitialStates {
     }
 }
 
-impl ToTokens for InitialStates {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for state in &self.0 {
-            state.to_tokens(tokens);
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InitialState {
     pub name: Ident,
@@ -72,20 +64,39 @@ impl Parse for InitialState {
     }
 }
 
-impl ToTokens for InitialState {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        let fn_name = Ident::new(
-            &self.name.to_string().to_case(convert_case::Case::Snake),
-            self.name.span(),
-        );
-        let variant_name = &self.name;
-        let struct_name = Ident::new(&format!("{}State", &self.name), Span::call_site());
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct InitialStateFns {
+    pub enum_name: Ident,
+    pub initial_states: Vec<InitialState>,
+}
 
-        tokens.extend(quote! {
-            pub fn #fn_name() -> State {
-                State::#variant_name(#struct_name::FromInit)
-            }
-        })
+impl InitialStates {
+    pub fn to_fn(&self, enum_name: &Ident) -> InitialStateFns {
+        InitialStateFns {
+            enum_name: enum_name.clone(),
+            initial_states: self.0.clone(),
+        }
+    }
+}
+
+impl ToTokens for InitialStateFns {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        for s in &self.initial_states {
+            let fn_name = Ident::new(
+                &s.name.to_string().to_case(convert_case::Case::Snake),
+                s.name.span(),
+            );
+            let variant_name = &s.name;
+            let struct_name = Ident::new(&format!("{}State", &s.name), Span::call_site());
+
+            let enum_name = &self.enum_name;
+
+            tokens.extend(quote! {
+                pub fn #fn_name() -> #enum_name {
+                    #enum_name::#variant_name(#struct_name::FromInit)
+                }
+            })
+        }
     }
 }
 
@@ -103,24 +114,6 @@ mod tests {
         };
 
         assert_eq!(left, right);
-    }
-
-    #[test]
-    fn test_initial_state_to_tokens() {
-        let initial_state = InitialState {
-            name: parse_quote! { Unlocked },
-        };
-
-        let left = quote! {
-            pub fn unlocked() -> State {
-                State::Unlocked(UnlockedState::FromInit)
-            }
-        };
-
-        let mut right = TokenStream::new();
-        initial_state.to_tokens(&mut right);
-
-        assert_eq!(format!("{}", left), format!("{}", right))
     }
 
     #[test]
@@ -151,15 +144,16 @@ mod tests {
             InitialState {
                 name: parse_quote! { Unlocked },
             },
-        ]);
+        ])
+        .to_fn(&parse_quote! { Door });
 
         let left = quote! {
-            pub fn locked() -> State {
-                State::Locked(LockedState::FromInit)
+            pub fn locked() -> Door {
+                Door::Locked(LockedState::FromInit)
             }
 
-            pub fn unlocked() -> State {
-                State::Unlocked(UnlockedState::FromInit)
+            pub fn unlocked() -> Door {
+                Door::Unlocked(UnlockedState::FromInit)
             }
         };
 

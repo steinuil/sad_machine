@@ -9,6 +9,7 @@ use crate::{
 #[derive(Debug, PartialEq)]
 #[allow(single_use_lifetimes)]
 pub(crate) struct StateTransitions<'a> {
+    pub enum_name: &'a Ident,
     pub states: &'a States,
     pub transitions: &'a Transitions,
 }
@@ -24,15 +25,18 @@ impl<'a> ToTokens for StateTransitions<'a> {
                 .0
                 .iter()
                 .filter(|t| t.from.name.to_string() == s.name.to_string())
-                .collect::<Vec<&Transition>>();
+                .cloned()
+                .collect::<Vec<Transition>>();
 
             if transitions.is_empty() {
                 continue;
             }
 
+            let transitions = Transitions(transitions).to_fns(&self.enum_name);
+
             tokens.extend(quote! {
                 impl #struct_name {
-                    #(#transitions)*
+                    #transitions
                 }
             })
         }
@@ -49,6 +53,7 @@ mod tests {
     #[test]
     fn state_transition_tokens() {
         let state_transitions = StateTransitions {
+            enum_name: &parse_quote! { TurnStile },
             states: &States(vec![parse_quote!(Locked), parse_quote!(Unlocked)]),
             transitions: &Transitions(vec![
                 Transition {
@@ -78,14 +83,14 @@ mod tests {
 
         let left = quote! {
             impl LockedState {
-                pub fn coin(&self) -> State {
-                    State::Unlocked(UnlockedState::FromCoin)
+                pub fn coin(&self) -> TurnStile {
+                    TurnStile::Unlocked(UnlockedState::FromCoin)
                 }
             }
 
             impl UnlockedState {
-                pub fn push(&self) -> State {
-                    State::Locked(LockedState::FromPush)
+                pub fn push(&self) -> TurnStile {
+                    TurnStile::Locked(LockedState::FromPush)
                 }
             }
         };

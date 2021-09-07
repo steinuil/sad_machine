@@ -71,14 +71,6 @@ impl Parse for Transitions {
     }
 }
 
-impl ToTokens for Transitions {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for transition in &self.0 {
-            transition.to_tokens(tokens);
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Transition {
     pub event: Event,
@@ -86,28 +78,43 @@ pub(crate) struct Transition {
     pub to: State,
 }
 
-impl ToTokens for Transition {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TransitionFns {
+    pub enum_name: Ident,
+    pub transitions: Vec<Transition>,
+}
+
+impl Transitions {
+    pub fn to_fns(&self, enum_name: &Ident) -> TransitionFns {
+        TransitionFns {
+            enum_name: enum_name.clone(),
+            transitions: self.0.clone(),
+        }
+    }
+}
+
+impl ToTokens for TransitionFns {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let event_fn = Ident::new(
-            &self
-                .event
-                .name
-                .to_string()
-                .to_case(convert_case::Case::Snake),
-            self.event.name.span(),
-        );
+        for t in &self.transitions {
+            let event_fn = Ident::new(
+                &t.event.name.to_string().to_case(convert_case::Case::Snake),
+                t.event.name.span(),
+            );
 
-        let to_enum = &self.to.name.clone();
+            let to_enum = &t.to.name.clone();
 
-        let to_struct = Ident::new(&format!("{}State", self.to.name), self.to.name.span());
+            let to_struct = Ident::new(&format!("{}State", t.to.name), t.to.name.span());
 
-        let event_enum = Ident::new(&format!("From{}", self.event.name), self.event.name.span());
+            let event_enum = Ident::new(&format!("From{}", t.event.name), t.event.name.span());
 
-        tokens.extend(quote! {
-            pub fn #event_fn(&self) -> State {
-                State::#to_enum(#to_struct::#event_enum)
-            }
-        });
+            let enum_name = &self.enum_name;
+
+            tokens.extend(quote! {
+                pub fn #event_fn(&self) -> #enum_name {
+                    #enum_name::#to_enum(#to_struct::#event_enum)
+                }
+            });
+        }
     }
 }
 
@@ -116,32 +123,6 @@ mod tests {
     use super::*;
     use proc_macro2::TokenStream;
     use syn::{self, parse_quote};
-
-    #[test]
-    fn test_transition_to_tokens() {
-        let transition = Transition {
-            event: Event {
-                name: parse_quote! { Push },
-            },
-            from: State {
-                name: parse_quote! { Locked },
-            },
-            to: State {
-                name: parse_quote! { Unlocked },
-            },
-        };
-
-        let left = quote! {
-            pub fn push(&self) -> State {
-                State::Unlocked(UnlockedState::FromPush)
-            }
-        };
-
-        let mut right = TokenStream::new();
-        transition.to_tokens(&mut right);
-
-        assert_eq!(format!("{}", left), format!("{}", right))
-    }
 
     #[test]
     fn test_transitions_parse() {
@@ -248,23 +229,24 @@ mod tests {
                     name: parse_quote! { Unlocked },
                 },
             },
-        ]);
+        ])
+        .to_fns(&parse_quote! { TurnStile });
 
         let left = quote! {
-            pub fn push(&self) -> State {
-                State::Locked(LockedState::FromPush)
+            pub fn push(&self) -> TurnStile {
+                TurnStile::Locked(LockedState::FromPush)
             }
 
-            pub fn push(&self) -> State {
-                State::Locked(LockedState::FromPush)
+            pub fn push(&self) -> TurnStile {
+                TurnStile::Locked(LockedState::FromPush)
             }
 
-            pub fn coin(&self) -> State {
-                State::Unlocked(UnlockedState::FromCoin)
+            pub fn coin(&self) -> TurnStile {
+                TurnStile::Unlocked(UnlockedState::FromCoin)
             }
 
-            pub fn coin(&self) -> State {
-                State::Unlocked(UnlockedState::FromCoin)
+            pub fn coin(&self) -> TurnStile {
+                TurnStile::Unlocked(UnlockedState::FromCoin)
             }
         };
 

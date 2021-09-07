@@ -25,7 +25,7 @@
     unused
 )]
 
-use crate::machine::Machines;
+use crate::machine::Machine;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
@@ -40,7 +40,7 @@ mod transition;
 /// Generate the declaratively described state machine diagram.
 #[proc_macro]
 pub fn state_machine(input: TokenStream) -> TokenStream {
-    let machines: Machines = parse_macro_input!(input as Machines);
+    let machines: Machine = parse_macro_input!(input as Machine);
 
     quote!(#machines).into()
 }

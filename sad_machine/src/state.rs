@@ -14,10 +14,7 @@ impl ToTokens for States {
         let states = &self.0;
 
         tokens.extend(quote! {
-            #[derive(Debug, Clone, PartialEq, Eq)]
-            pub enum State {
-                #(#states),*
-            }
+            #(#states),*
         })
     }
 }
@@ -105,11 +102,8 @@ mod tests {
         ]);
 
         let left = quote! {
-            #[derive(Debug, Clone, PartialEq, Eq)]
-            pub enum State {
-                Locked(LockedState),
-                Unlocked(UnlockedState)
-            }
+            Locked(LockedState),
+            Unlocked(UnlockedState)
         };
 
         let mut right = TokenStream::new();

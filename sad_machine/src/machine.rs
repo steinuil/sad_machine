@@ -16,39 +16,6 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq)]
-pub(crate) struct Machines(Vec<Machine>);
-
-impl Parse for Machines {
-    /// example machines tokens:
-    ///
-    /// ```text
-    /// TurnStile { ... }
-    /// Lock { ... }
-    /// MyStateMachine { ... }
-    /// ```
-    fn parse(input: ParseStream<'_>) -> Result<Self> {
-        let mut machines: Vec<Machine> = Vec::new();
-
-        while !input.is_empty() {
-            // `TurnStile { ... }`
-            //  ^^^^^^^^^^^^^^^^^
-            let machine = Machine::parse(input)?;
-            machines.push(machine);
-        }
-
-        Ok(Machines(machines))
-    }
-}
-
-impl ToTokens for Machines {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        for machine in &self.0 {
-            machine.to_tokens(tokens);
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
 pub(crate) struct Machine {
     pub name: Ident,
     pub initial_states: InitialStates,
@@ -124,22 +91,29 @@ impl ToTokens for Machine {
 
         let machine_enum = MachineEnum { machine: &self };
 
-        let initial_states = &self.initial_states;
-
         let states = &self.states();
 
+        let initial_states = &self.initial_states.to_fn(name);
+
         let state_transitions = StateTransitions {
+            enum_name: name,
             states,
             transitions: &self.transitions,
         };
 
         tokens.extend(quote! {
-            mod #name {
-                #machine_enum
+            #machine_enum
+
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum #name {
                 #states
-                #initial_states
-                #state_transitions
             }
+
+            impl #name {
+                #initial_states
+            }
+
+            #state_transitions
         });
     }
 }
@@ -154,7 +128,7 @@ mod machines_tests {
     #[test]
     fn test_machine_parse() {
         let left: Machine = syn::parse2(quote! {
-           turn_stile {
+           TurnStile {
                InitialStates { Locked, Unlocked }
 
                Coin { Locked => Unlocked }
@@ -164,7 +138,7 @@ mod machines_tests {
         .unwrap();
 
         let right = Machine {
-            name: parse_quote! { turn_stile },
+            name: parse_quote! { TurnStile },
             initial_states: InitialStates(vec![
                 InitialState {
                     name: parse_quote! { Locked },
@@ -205,7 +179,7 @@ mod machines_tests {
     #[test]
     fn test_machine_to_tokens() {
         let machine = Machine {
-            name: parse_quote! { turn_stile },
+            name: parse_quote! { TurnStile },
             initial_states: InitialStates(vec![
                 InitialState {
                     name: parse_quote! { Unlocked },
@@ -228,302 +202,42 @@ mod machines_tests {
         };
 
         let left = quote! {
-            mod turn_stile {
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum UnlockedState {
-                    FromInit
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum UnlockedState {
+                FromInit
+            }
+
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum LockedState {
+                FromPush,
+                FromInit
+            }
+
+            #[derive(Debug, Clone, PartialEq, Eq)]
+            pub enum TurnStile {
+                Unlocked(UnlockedState),
+                Locked(LockedState)
+            }
+
+            impl TurnStile {
+                pub fn unlocked() -> TurnStile {
+                    TurnStile::Unlocked(UnlockedState::FromInit)
                 }
 
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum LockedState {
-                    FromPush,
-                    FromInit
+                pub fn locked() -> TurnStile {
+                    TurnStile::Locked(LockedState::FromInit)
                 }
+            }
 
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum State {
-                    Unlocked(UnlockedState),
-                    Locked(LockedState)
-                }
-
-                pub fn unlocked() -> State {
-                    State::Unlocked(UnlockedState::FromInit)
-                }
-
-                pub fn locked() -> State {
-                    State::Locked(LockedState::FromInit)
-                }
-
-                impl UnlockedState {
-                    pub fn push(&self) -> State {
-                        State::Locked(LockedState::FromPush)
-                    }
+            impl UnlockedState {
+                pub fn push(&self) -> TurnStile {
+                    TurnStile::Locked(LockedState::FromPush)
                 }
             }
         };
 
         let mut right = TokenStream::new();
         machine.to_tokens(&mut right);
-
-        assert_eq!(format!("{}", left), format!("{}", right))
-    }
-
-    #[test]
-    fn test_machines_parse() {
-        let left: Machines = syn::parse2(quote! {
-           turn_stile {
-               InitialStates { Locked, Unlocked }
-
-               Coin { Locked => Unlocked }
-               Push { Unlocked => Locked }
-           }
-
-           Lock {
-               InitialStates { Locked, Unlocked }
-
-               TurnKey {
-                   Locked => Unlocked
-                   Unlocked => Locked
-                }
-           }
-        })
-        .unwrap();
-
-        let right = Machines(vec![
-            Machine {
-                name: parse_quote! { turn_stile },
-                initial_states: InitialStates(vec![
-                    InitialState {
-                        name: parse_quote! { Locked },
-                    },
-                    InitialState {
-                        name: parse_quote! { Unlocked },
-                    },
-                ]),
-                transitions: Transitions(vec![
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { Coin },
-                        },
-                        from: State {
-                            name: parse_quote! { Locked },
-                        },
-                        to: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                    },
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { Push },
-                        },
-                        from: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                        to: State {
-                            name: parse_quote! { Locked },
-                        },
-                    },
-                ]),
-            },
-            Machine {
-                name: parse_quote! { Lock },
-                initial_states: InitialStates(vec![
-                    InitialState {
-                        name: parse_quote! { Locked },
-                    },
-                    InitialState {
-                        name: parse_quote! { Unlocked },
-                    },
-                ]),
-                transitions: Transitions(vec![
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { TurnKey },
-                        },
-                        from: State {
-                            name: parse_quote! { Locked },
-                        },
-                        to: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                    },
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { TurnKey },
-                        },
-                        from: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                        to: State {
-                            name: parse_quote! { Locked },
-                        },
-                    },
-                ]),
-            },
-        ]);
-
-        assert_eq!(left, right);
-    }
-
-    #[test]
-    fn test_machines_to_tokens() {
-        let machines = Machines(vec![
-            Machine {
-                name: parse_quote! { turn_stile },
-                initial_states: InitialStates(vec![
-                    InitialState {
-                        name: parse_quote! { Locked },
-                    },
-                    InitialState {
-                        name: parse_quote! { Unlocked },
-                    },
-                ]),
-                transitions: Transitions(vec![
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { Coin },
-                        },
-                        from: State {
-                            name: parse_quote! { Locked },
-                        },
-                        to: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                    },
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { Push },
-                        },
-                        from: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                        to: State {
-                            name: parse_quote! { Locked },
-                        },
-                    },
-                ]),
-            },
-            Machine {
-                name: parse_quote! { lock },
-                initial_states: InitialStates(vec![
-                    InitialState {
-                        name: parse_quote! { Locked },
-                    },
-                    InitialState {
-                        name: parse_quote! { Unlocked },
-                    },
-                ]),
-                transitions: Transitions(vec![
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { TurnKey },
-                        },
-                        from: State {
-                            name: parse_quote! { Locked },
-                        },
-                        to: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                    },
-                    Transition {
-                        event: Event {
-                            name: parse_quote! { TurnKey },
-                        },
-                        from: State {
-                            name: parse_quote! { Unlocked },
-                        },
-                        to: State {
-                            name: parse_quote! { Locked },
-                        },
-                    },
-                ]),
-            },
-        ]);
-
-        let left = quote! {
-            mod turn_stile {
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum LockedState {
-                    FromPush,
-                    FromInit
-                }
-
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum UnlockedState {
-                    FromCoin,
-                    FromInit
-                }
-
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum State {
-                    Locked(LockedState),
-                    Unlocked(UnlockedState)
-                }
-
-                pub fn locked() -> State {
-                    State::Locked(LockedState::FromInit)
-                }
-
-                pub fn unlocked() -> State {
-                    State::Unlocked(UnlockedState::FromInit)
-                }
-
-                impl LockedState {
-                    pub fn coin(&self) -> State {
-                        State::Unlocked(UnlockedState::FromCoin)
-                    }
-                }
-
-                impl UnlockedState {
-                    pub fn push(&self) -> State {
-                        State::Locked(LockedState::FromPush)
-                    }
-                }
-            }
-
-            mod lock {
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum LockedState {
-                    FromTurnKey,
-                    FromInit
-                }
-
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum UnlockedState {
-                    FromTurnKey,
-                    FromInit
-                }
-
-                #[derive(Debug, Clone, PartialEq, Eq)]
-                pub enum State {
-                    Locked(LockedState),
-                    Unlocked(UnlockedState)
-                }
-
-                pub fn locked() -> State {
-                    State::Locked(LockedState::FromInit)
-                }
-
-                pub fn unlocked() -> State {
-                    State::Unlocked(UnlockedState::FromInit)
-                }
-
-                impl LockedState {
-                    pub fn turn_key(&self) -> State {
-                        State::Unlocked(UnlockedState::FromTurnKey)
-                    }
-                }
-
-                impl UnlockedState {
-                    pub fn turn_key(&self) -> State {
-                        State::Locked(LockedState::FromTurnKey)
-                    }
-                }
-            }
-        };
-
-        let mut right = TokenStream::new();
-        machines.to_tokens(&mut right);
 
         assert_eq!(format!("{}", left), format!("{}", right))
     }
