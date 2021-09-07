@@ -1,62 +1,22 @@
-<img src="/rocket.svg" width="50" align="left" title="Rusty Rockets">
+# Sad Machine
 
-_SM serves as one of the building blocks for [an open-source game about space
-engineering and exploration][rkt]. **This library is in active use and
-development.**_
+`sad_machine` provides a macro to declaratively define a state machine
+and the transitions between states. It's focused on providing a nice API
+for applications that deal with event loops and use a state machine to keep
+track of their state.
 
-[rkt]: https://rustic.games
+`sad_machine` is a fork of the [`sm`](https://github.com/rustic-games/sm)
+library which removes the traits and keeps only the macro, and redesigns the
+generated code to be more enum-friendly.
 
-<br />
+## Usage
 
-<img src="/logo.svg" align="right" title="SM logo by Jean Mertz" width="400" />
-
-SM aims to be a **safe**, **fast** and **simple** state machine library.
-
-- **safe** — Rust's type system, ownership model and exhaustive pattern matching
-  prevent you from mis-using your state machines
-
-- **fast** — zero runtime overhead, the machine is 100% static, all validation
-  happens at compile-time
-
-- **simple** — five traits, and one optional declarative macro, control-flow
-  only, no business logic attached
-
----
-
-<div align="right">
-
-[![Latest Crate Version](https://img.shields.io/crates/v/sm.svg?logo=rust&label=version&logoColor=white&colorB=brightgreen)](https://crates.io/crates/sm "The latest released version on crates.io.")
-[![Discord Chat](https://img.shields.io/discord/477552212156088320.svg?logo=discord&label=discord%20chat&logoColor=white)](https://discord.gg/Kc4qZWE "Ask a question or just enjoy your stay!")
-[![Build Status](https://img.shields.io/circleci/project/github/rustic-games/sm/master.svg?logo=linux&label=linux&logoColor=white)](https://circleci.com/gh/rustic-games/sm/tree/master "Linux builds run on CircleCI. Click to see more details.")
-[![Test Coverage Status](https://img.shields.io/codecov/c/github/rustic-games/sm/master.svg?logo=codeship&label=coverage&logoColor=white)](https://codecov.io/gh/rustic-games/sm "Code coverage is provided by Codecov. It's not 100% accurate, but good enough.")
-
-</div>
-<br />
-
-Using this library, you declaratively define your state machines as as set
-of _states_, connected via _transitions_, triggered by _events_. You can
-query the current state of the machine, or pattern match against all
-possible machine variants.
-
-The implementation ensures a zero-sized abstraction that uses Rust's
-type-system and ownership model to guarantee valid transitions between
-states using events, and makes sure previous states are no longer accessible
-after transitioning away to another state. Rust validates correct usage of
-the state machine at compile-time, no runtime checking occurs when using the
-library.
-
-The library exposes the `sm!` macro, which allows you to declaratively build
-the state machine.
-
-## Examples
-
-### Quick Example
+`sad_machine` exposes only one macro, `state_machine!`. A quick example:
 
 ```rust
-extern crate sm;
-use sm::sm;
+use sad_machine::state_machine;
 
-sm! {
+state_machine! {
     Lock {
         InitialStates { Locked, Unlocked }
 
@@ -65,42 +25,74 @@ sm! {
             Unlocked => Locked
         }
 
-        Break {
+        BreakKeyhole {
             Locked, Unlocked => Broken
+        }
+
+        Repair {
+            Broken => Locked
         }
     }
 }
 
 fn main() {
-    use Lock::*;
-    let lock = Machine::new(Locked);
-    let lock = lock.transition(TurnKey);
+    let mut lock = Lock::locked();
 
-    assert_eq!(lock.state(), Unlocked);
-    assert_eq!(lock.trigger().unwrap(), TurnKey);
+    loop {
+        match lock {
+            Lock::Locked(m @ LockedState::FromInit) => lock = m.turn_key(),
+            Lock::Unlocked(m) => lock = m.turn_key(),
+            Lock::Locked(m) => lock = m.break_keyhole(),
+            Lock::Broken(_) => break,
+        }
+    }
+
+    assert_eq!(lock, Lock::Broken(BrokenState::FromBreakKeyhole));
 }
 ```
+
+In this example, the macro generated:
+
+- An enum called `Lock` containing all states of the enum.
+- An enum for each state containing the name of the event that triggered
+  the transition. For the `Unlocked` state, the enum is called `UnlockedState`
+  and contains the two cases `FromInit, FromTurnKey`.
+- Two initialization functions: `Lock::locked()` and `Lock::unlocked()`,
+  mirroring the states defined in `InitialStates`.
+- Transition methods for the state enums. For the `Broken` state,
+  a `.repair()` method is generated which mirrors the `Repair` event.
+
+A few differences from `sm`'s API:
+
+- The generated code is not wrapped in a module, and all enums and functions
+  are `pub`.
+- Initial states are encoded as functions on the state enum.
+- Transitions are encoded as methods on the object contained inside
+  the cases of the state enum.
+- The initial state and transition functions all return the state enum.
+- The cases of the state enum contain the name of the event that triggered
+  the transition. Each state has its own enum for this purpose.
+- The transitions do not consume the original state machine.
+- You can only define one state machine per macro instantiation.
 
 ### Descriptive Example
 
 The below example explains step-by-step how to create a new state machine
 using the provided macro, and then how to use the created machine in your
-code by querying states, and transitioning between states by triggering
-events.
+code.
 
 #### Declaring a new State Machine
 
 First, we import the macro from the crate:
 
 ```rust
-extern crate sm;
-use sm::sm;
+use sad_machine::state_machine;
 ```
 
 Next, we initiate the macro declaration:
 
 ```rust
-sm! {
+state_machine! {
 ```
 
 Then, provide a name for the machine, and declare a list of allowed initial
@@ -119,7 +111,7 @@ Finally, we declare one or more events and the associated transitions:
             Unlocked => Locked
         }
 
-        Break {
+        BreakKeyhole {
             Locked, Unlocked => Broken
         }
     }
@@ -134,185 +126,74 @@ transitions, and can now use this state machine in our code.
 You can initialise the machine as follows:
 
 ```rust
-let sm = Lock::Machine::new(Lock::Locked);
+let sm = Lock::locked();
 ```
 
-We can make this a bit less verbose by bringing our machine into scope:
+We've initialised our machine in the `Locked` state. The `sm` is as an enum
+covering all possible states of the state machine, and each state contains
+the name of the event that triggered it. A full pattern match on the state
+enum looks like this:
 
 ```rust
-use Lock::*;
-let sm = Machine::new(Locked);
-```
-
-We've initialised our machine in the `Locked` state. You can get the current
-state of the machine by sending the `state()` method to the machine:
-
-```rust
-let state = sm.state();
-assert_eq!(state, Locked);
-```
-
-While you _can_ use `sm.state()` with conditional branching to execute your
-code based on the current state, this can be a bit tedious, it's less
-idiomatic, and it prevents you from using one extra compile-time validation
-tool in our toolbox: using Rust's exhaustive pattern matching requirement to
-ensure you've covered all possible state variants in your business logic.
-
-While `sm.state()` returns the state as a unit-like struct (which itself is
-a [ZST], or Zero Sized Type), you can use the `sm.as_enum()` method to get
-the state machine back as an enum variant.
-
-[zst]: https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts
-
-Using the enum variant and pattern matching, you are able to do the
-following:
-
-```rust
-use Lock::Variant::*;
-
-match sm.as_enum() {
-    InitialLocked(m) => {
-        assert_eq!(m.state(), Locked);
-        assert!(m.trigger().is_none());
-    }
-    InitialUnlocked(m) => {
-        assert_eq!(m.state(), Unlocked);
-        assert!(m.trigger().is_none());
-    }
-    LockedByTurnKey(m) => {
-        assert_eq!(m.state(), Locked);
-        assert_eq!(m.trigger().unwrap(), TurnKey);
-    }
-    UnlockedByTurnKey(m) => {
-        assert_eq!(m.state(), Unlocked);
-        assert_eq!(m.trigger().unwrap(), TurnKey);
-    }
-    BrokenByBreak(m) => {
-        assert_eq!(m.state(), Broken);
-        assert_eq!(m.trigger().unwrap(), Break);
-    }
+match lock {
+    Lock::Locked(LockedState::FromInit) => ..,
+    Lock::Locked(LockedState::FromTurnKey) => ..,
+    Lock::Locked(LockedState::FromRepair) => ..,
+    Lock::Unlocked(UnlockedState::FromInit) => ..,
+    Lock::Unlocked(UnlockedState::FromTurnKey) => ..,
+    Lock::Broken(BrokenState::FromBreakKeyhole) => ..,
 }
 ```
 
-Each state configured with `InitialStates` has its own variant named
-`Initial<State>`. Next to those, each valid state + event combination also
-has its own variant, named `<state>By<event>`.
-
-The compiler won't be satisfied until you've either exhausted all possible
-enum variants, or you explicitly opt-out of matching all variants, either
-way, you can be much more confident that your code won't break if you add a
-new state down the road, but forget to add it to a pattern match somewhere
-deep inside your code-base.
-
-To transition this machine to the `Unlocked` state, we send the `transition`
-method, using the `TurnKey` event:
+To transition this machine to the `Unlocked` state, we send the `turn_key`
+method on the LockedState object:
 
 ```rust
-let sm = sm.transition(TurnKey);
-assert_eq!(sm.state(), Unlocked);
+let lock = match lock {
+    Lock::Locked(locked) => locked.turn_key(),
+    _ => panic!("wrong state"),
+}
 ```
 
-Because multiple events can lead to a single state, it's also important to
-be able to determine what event caused the machine to transition to the
-current state. We can ask this information using the `trigger()` method:
+#### Caveat emptor
 
-```rust
-assert_eq!(sm.trigger().unwrap(), TurnKey);
-```
+The state machine **does not consume the previous state** when performing
+a transition, as opposed to `sm`'s behavior, so be careful when operating in
+a concurrent context.
 
-The `trigger()` method returns `None` if no state transition has taken place
-yet (ie. the machine is still in its initial state), and `Some(Event)` if
-one or more transitions have taken place.
+It also doesn't prevent you from constructing a state that is not one of the
+initial states, due to Rust's lack of private constructors for enums.
 
-#### A word about Type-Safety and Ownership
+## Why fork
 
-It's important to realise that we've _consumed_ the original machine in the
-above example when we transitioned the machine to a different state, and got
-a newly initialised machine back in the `Unlocked` state.
+Some of the design choices that `sm` makes conflict with my use case.
 
-This allows us to safely use the machine without having to worry about
-multiple readers using the machine in different states.
+I was using the library in an event loop where:
 
-All these checks are applied on compile-time, so the following example would
-fail to compile:
+1. The state is stored as its enum `Variant` representation, and can only
+   advance by one step in a single loop
+2. Multiple events can trigger a state change to a certain state, but I
+   don't particularly care about the event that triggered the stage change
 
-```rust
-let sm2 = sm.transition(TurnKey);
-assert_eq!(sm.state(), Locked);
-```
+`sm` seems to have different design goals:
 
-This fails with the following compilation error:
+1. The `transition` method returns a `Machine` type and not an enum, which
+   forces me to call `.as_enum()` on its result every time to store it as
+   `Variant`, but makes it easy to trigger multiple state transitions in
+   a single piece of code
+2. The cases of the `Variant` enum also include the name of the event that
+   triggered the state change, which led me to duplicate code in multiple
+   branches for each state that had multiple entry points
 
-```text
-error[E0382]: use of moved value: `sm`
-  --> src/lib.rs:315:12
-   |
-22 | let sm2 = sm.transition(TurnKey);
-   |           -- value moved here
-23 | assert_eq!(sm.state(), Locked);
-   |            ^^ value used here after move
-   |
-   = note: move occurs because `sm` has type `Lock::Machine<Lock::Locked>`, which does not implement the `Copy` trait
-```
+`sad_machine`'s API focuses on the state enum rather than on concrete states.
+The transition methods it generates return the enum, which makes it harder to
+trigger multiple transitions in the same piece of code, but on the other hand
+it removes the cruft of calling `.as_enum()` on the result, and its state enum
+does not encode the event name in the name of its cases, but rather carries it
+inside itself.
 
-Similarly, we cannot execute undefined transitions, these are also caught by
-the compiler:
-
-```rust
-assert_eq!(sm.state(), Broken);
-
-let sm = sm.transition(TurnKey);
-```
-
-This fails with the following compilation error:
-
-```text
-error[E0599]: no method named `transition` found for type `Lock::Machine<Lock::Broken>` in the current scope
-  --> src/lib.rs:360:13
-   |
-4  | sm! {
-   | --- method `transition` not found for this
-...
-25 | let sm = sm.transition(TurnKey);
-   |             ^^^^^^^^^^
-   |
-   = help: items from traits can only be used if the trait is implemented and in scope
-   = note: the following trait defines an item `transition`, perhaps you need to implement it:
-           candidate #1: `sm::Transition`
-```
-
-The error message is not great (and can potentially be improved in the
-future), but any error telling you `transition` is not implemented, or the
-passed in event type is invalid is an indication that you are trying to
-execute an illegal state transition.
-
-Finally, we are confined to initialising a new machine in only the states
-that we defined in `InitialStates`:
-
-```rust
-let sm = Machine::new(Broken);
-```
-
-This results in the following error:
-
-```
-error[E0277]: the trait bound `Lock::Broken: sm::InitialState` is not satisfied
-  --> src/lib.rs:417:10
-   |
-21 | let sm = Machine::new(Broken);
-   |          ^^^^^^^^^^^^ the trait `sm::InitialState` is not implemented for `Lock::Broken`
-   |
-   = note: required because of the requirements on the impl of `sm::NewMachine<Lock::Broken>` for `Lock::Machine<Lock::Broken>`
-```
-
-#### The End 👋
-
-And that's it! There's nothing else to it, except a declarative – and easy
-to read – state machine construction macro, and a type-safe and
-ownership-focused way of dealing with states and transitions, without any
-runtime overhead.
-
-**Go forth and transition!**
+This forks keeps `sm`'s parser for the DSL to define the state machine and
+changes the generated code.
 
 ## License
 
@@ -320,6 +201,8 @@ Licensed under either of
 
 - Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or https://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or https://opensource.org/licenses/MIT)
+
+This was the license of the original crate and I'd rather not change it.
 
 ### Contribution
 
