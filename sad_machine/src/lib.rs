@@ -1,5 +1,3 @@
-//! state_machine macro
-
 // quote! macro needs a higher recursion limit
 #![recursion_limit = "512"]
 #![forbid(
@@ -15,7 +13,6 @@
     variant_size_differences
 )]
 #![warn(
-    missing_docs,
     rust_2018_idioms,
     single_use_lifetimes,
     unused_import_braces,
