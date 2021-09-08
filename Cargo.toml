@@ -1,6 +1,6 @@
 [package]
 name = "sad_machine"
-version = "0.1.0"
+version = "1.0.0"
 authors = [
     "steinuil <steenuil.owl@gmail.com>",
     "Jean Mertz <helloworld@rustic.games>",
