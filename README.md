@@ -155,14 +155,69 @@ let lock = match lock {
 }
 ```
 
-#### Caveat emptor
+## Caveat emptor, or why you might not want to use this crate
 
-The state machine **does not consume the previous state** when performing
-a transition, as opposed to `sm`'s behavior, so be careful when operating in
-a concurrent context.
+1. The state machine **does not consume the previous state** when performing
+   a transition, as opposed to `sm`'s behavior, so be careful when operating in
+   a concurrent context.
 
-It also doesn't prevent you from constructing a state that is not one of the
-initial states, due to Rust's lack of private constructors for enums.
+2. The API doesn't prevent you from constructing a state that is not one of the
+   initial states, due to Rust's lack of private constructors for enums.
+
+3. In the example above, the transition `TurnKey` is defined for two states,
+   but the API does not allow you to pattern match on both cases that define that
+   transition and then call the `turn_key` method in a single match case. An example:
+
+    ```rust
+    // This code will not compile!
+    fn toggle_lock(lock: Lock) -> Lock {
+        match lock {
+            Lock::Locked(state) | Lock::Unlocked(state) => {
+                do_stuff();
+                state.turn_key()
+            }
+            _ => panic!("wrong state"),
+        }
+    }
+    ```
+
+    Since the previous state is not consumed, you can work around this by returning
+    the next state from the match and doing the work you need to do outside of it.
+
+    ```rust
+    fn toggle_lock(lock: Lock) -> Lock {
+        let new_state = match lock {
+            Lock::Locked(locked) => locked.turn_key(),
+            Lock::Unlocked(unlocked) => unlocked.turn_key(),
+            _ => panic!("wrong state"),
+        };
+
+        do_stuff();
+        new_state
+    }
+    ```
+
+    This can get cumbersome if you have a function that needs to do several things
+    inside of the match case where some states are equivalent. For example:
+
+    ```rust
+    fn advance(lock: Lock) -> Lock {
+        match lock {
+            Lock::Locked(state) => {
+                do_stuff1();
+                state.turn_key();
+            }
+            Lock::Unlocked(state) => {
+                do_stuff1();
+                state.turn_key();
+            }
+            Lock::Broken => {
+                do_stuff2();
+                lock
+            }
+        }
+    }
+    ```
 
 ## Why fork
 
